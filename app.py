@@ -1,50 +1,57 @@
 import gradio as gr
+import os
 from retriever import retrieve
 from groq import Groq
-import os
 
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+client = Groq(api_key="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")
 
 def ask_question(question: str):
-    # Retrieve relevant chunks
+    if not question or not question.strip():
+        return "Please ask a question.", ""
+    
     context_chunks = retrieve(question, top_k=5)
     
-    context = "\n\n".join([
-        f"Source: {c['source']}\n{c['text']}" for c in context_chunks
+    context = "\n\n---\n\n".join([
+        f"Source: {c['source']}\n{c['text'][:800]}" for c in context_chunks
     ])
     
-    # Strong grounding prompt
-    system_prompt = """You are a helpful assistant for Truman State University students.
-Answer ONLY using the provided context from official Truman documents.
-Always cite the source file(s). If the answer is not in the context, say: 
-"I don't have enough information from the available documents.""""
-
-    response = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"Context:\n{context}\n\nQuestion: {question}"}
-        ],
-        temperature=0.3,
-    )
+    system_prompt = "You are a helpful advisor for Truman State University students. Answer ONLY using the provided Truman documents. Cite the source filename. If you don't have enough information, reply: 'I don't have enough information from the available documents.'"
     
-    answer = response.choices[0].message.content
-    sources = [c['source'] for c in context_chunks]
-    
-    return answer, "\n".join(set(sources))
+    try:
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Context:\n{context}\n\nQuestion: {question}"}
+            ],
+            temperature=0.3,
+            max_tokens=800
+        )
+        answer = response.choices[0].message.content.strip()
+    except Exception as e:
+        answer = f"Error: {str(e)}"
 
-# Gradio Interface
+    sources = "\n".join(set(c['source'] for c in context_chunks))
+    
+    return answer, sources
+
 with gr.Blocks(title="Truman IDM RAG") as demo:
-    gr.Markdown("# Truman Interdisciplinary Major Maker\nAsk questions about IDS majors")
+    gr.Markdown("# Truman Interdisciplinary Major Maker\nAsk about IDS majors, requirements, and proposals")
     
     with gr.Row():
-        question = gr.Textbox(label="Your Question", placeholder="What are the credit requirements for IDS major?")
-        ask_btn = gr.Button("Ask")
+        inp = gr.Textbox(
+            label="Ask a question about Interdisciplinary Majors at Truman",
+            placeholder="What are the minimum credit requirements for an IDS major?",
+            lines=2
+        )
+        btn = gr.Button("Ask", variant="primary")
     
-    answer = gr.Textbox(label="Answer", lines=8)
-    sources = gr.Textbox(label="Sources", lines=3)
+    answer_box = gr.Textbox(label="Answer", lines=10)
+    sources_box = gr.Textbox(label="Sources Used", lines=4)
     
-    ask_btn.click(ask_question, inputs=question, outputs=[answer, sources])
+    btn.click(ask_question, inputs=inp, outputs=[answer_box, sources_box])
+    inp.submit(ask_question, inputs=inp, outputs=[answer_box, sources_box])
 
 if __name__ == "__main__":
+    print("🚀 Starting Truman IDM RAG...")
     demo.launch()
