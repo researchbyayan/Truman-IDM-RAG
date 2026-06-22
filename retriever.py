@@ -1,3 +1,5 @@
+from typing import List
+
 from sentence_transformers import SentenceTransformer
 import chromadb
 from chromadb.config import Settings
